@@ -27,6 +27,7 @@ type interface = {
   id    : id;
   ethif : Ethif.t;
   ipv4  : Ipv4.t;
+  ipv6  : Ipv6.t;
   icmp  : Icmp.t;
   udp   : Udp.t;
   tcp   : Tcp.Pcb.t;
@@ -35,6 +36,7 @@ type interface = {
 let get_id t    = t.id
 let get_ethif t = t.ethif
 let get_ipv4 t  = t.ipv4
+let get_ipv6 t  = t.ipv6
 let get_icmp t  = t.icmp
 let get_udp t   = t.udp
 let get_tcp t   = t.tcp
@@ -46,7 +48,9 @@ and t = {
   listeners: (id, interface) Hashtbl.t
 }
 
-type config = [ `DHCP | `IPv4 of Ipaddr.V4.t * Ipaddr.V4.t * Ipaddr.V4.t list ]
+type config = [ `DHCP
+              | `IPv4 of Ipaddr.V4.t * Ipaddr.V4.t * Ipaddr.V4.t list
+              | `IPv6 of Ipaddr.V6.t * Ipaddr.V6.t * Ipaddr.V6.t list ]
 
 (* Configure an interface based on the Config module *)
 let configure i =
@@ -66,16 +70,28 @@ let configure i =
     Ipv4.set_gateways i.ipv4 gateways >>
     return ()
 
+  |`IPv6 (addr, netmask, gateways) ->
+    Printf.printf "Manager: Interface %s to %s nm %s gw [%s]\n%!" i.id
+      (Ipaddr.V6.to_string addr)
+      (Ipaddr.V6.to_string netmask)
+      (String.concat ", " (List.map Ipaddr.V6.to_string gateways));
+    Ipv6.set_ip i.ipv6 addr >>
+    Ipv6.set_netmask i.ipv6 netmask >>
+    Ipv6.set_gateways i.ipv6 gateways >>
+    return ()
+
+
 (* Plug in a new network interface with given id *)
 let plug t netif =
   let id = Netif.id netif in
   Printf.printf "Manager: plug %s\n%!" id;
   let (ethif, ethif_t) = Ethif.create netif in
   let (ipv4, ipv4_t)   = Ipv4.create ethif in
+  let (ipv6, ipv6_t)   = Ipv6.create ethif in
   let (icmp, icmp_t)   = Icmp.create ipv4 in
   let (tcp, tcp_t)     = Tcp.Pcb.create ipv4 in
   let (udp, udp_t)     = Udp.create ipv4 in
-  let i = { id; ipv4; icmp; ethif; tcp; udp } in
+  let i = { id; ipv4; ipv6; icmp; ethif; tcp; udp } in
   (* The interface thread should be cancellable by exceptions from the
      rest of the threads, as a debug measure.
      TODO: think about cancellation strategy here
@@ -123,19 +139,19 @@ let match_ip_match ip netmask dst_ip =
 let i_of_dst_ip t addr =
   let ret = ref None in
   let netmask = ref 0l in
-  let addr = Ipaddr.V4.to_int32 addr in 
+  let addr = Ipaddr.V4.to_int32 addr in
   let _ = Hashtbl.iter
       (fun _ i ->
-         let l_ip =  Ipaddr.V4.to_int32 
+         let l_ip =  Ipaddr.V4.to_int32
                        (Ipv4.get_ip i.ipv4) in
-         let l_mask = Ipaddr.V4.to_int32 
+         let l_mask = Ipaddr.V4.to_int32
                         (Ipv4.get_netmask i.ipv4) in
-           (* Need to consider also default gateways as 
+           (* Need to consider also default gateways as
            * well as same subnet forwarding *)
           if (( (Int32.logor (!netmask) l_mask) <> !netmask) &&
                (match_ip_match l_ip l_mask addr)) then (
                  ret := Some(i);
-                 netmask :=  Ipaddr.V4.to_int32 
+                 netmask :=  Ipaddr.V4.to_int32
                                (Ipv4.get_netmask i.ipv4)
                )
       ) t.listeners in
@@ -146,12 +162,18 @@ let i_of_dst_ip t addr =
 (* Match an address and port to a TCP thread *)
 let tcpv4_of_addr t addr = List.map (fun x -> x.tcp) (i_of_ip t addr)
 
+let tcpv6_of_addr t addr = []
+
 (* TODO: do actual route selection *)
 let udpv4_of_addr (t:t) addr = List.map (fun x -> x.udp) (i_of_ip t addr)
+
+let udpv6_of_addr t addr = []
 
 let tcpv4_of_dst_addr t addr =
   let x = i_of_dst_ip t addr in
     x.tcp
+
+let tcpv6_of_dst_addr t addr = failwith "todo"
 
 let inject_packet t id frame =
   try_lwt
@@ -174,4 +196,3 @@ let get_intf_ipv4addr t id =
 let set_promiscuous t id f =
   let intf = Hashtbl.find t.listeners id in
   Ethif.set_promiscuous intf.ethif (f id)
-

@@ -54,9 +54,9 @@ cenum op {
 
 (* Prettyprint cache contents *)
 let prettyprint t =
-  printf "ARP info:\n"; 
-  Hashtbl.iter (fun ip entry -> 
-    printf "%s -> %s\n%!" 
+  printf "ARP info:\n";
+  Hashtbl.iter (fun ip entry ->
+    printf "%s -> %s\n%!"
      (Ipaddr.V4.to_string ip)
      (match entry with
       | Incomplete _ -> "I"
@@ -109,13 +109,13 @@ and output t arp =
   let op =
     match arp.op with
     |`Request -> 1
-    |`Reply -> 2 
-    |`Unknown n -> n 
+    |`Reply -> 2
+    |`Unknown n -> n
   in
   set_arp_dst dmac 0 buf;
   set_arp_src smac 0 buf;
   set_arp_ethertype buf 0x0806; (* ARP *)
-  set_arp_htype buf 1; 
+  set_arp_htype buf 1;
   set_arp_ptype buf 0x0800; (* IPv4 *)
   set_arp_hlen buf 6; (* ethernet mac size *)
   set_arp_plen buf 4; (* ipv4 size *)

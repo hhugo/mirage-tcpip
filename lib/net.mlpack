@@ -3,6 +3,7 @@ Checksum
 Arp
 Ethif
 Ipv4
+Ipv6
 Icmp
 Udp
 dhcp/Dhcp

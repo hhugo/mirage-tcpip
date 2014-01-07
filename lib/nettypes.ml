@@ -17,6 +17,9 @@
 type ipv4_src = Ipaddr.V4.t option * int
 type ipv4_dst = Ipaddr.V4.t * int
 
+type ipv6_src = Ipaddr.V6.t option * int
+type ipv6_dst = Ipaddr.V6.t * int
+
 type arp = {
   op: [ `Request |`Reply |`Unknown of int ];
   sha: Macaddr.t;

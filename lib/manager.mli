@@ -23,7 +23,9 @@
 open Nettypes
 
 (** Type representing an IPv4 configuration for an interface. *)
-type config = [ `DHCP | `IPv4 of Ipaddr.V4.t * Ipaddr.V4.t * Ipaddr.V4.t list ]
+type config = [ `DHCP
+              | `IPv4 of Ipaddr.V4.t * Ipaddr.V4.t * Ipaddr.V4.t list
+              | `IPv6 of Ipaddr.V6.t * Ipaddr.V6.t * Ipaddr.V6.t list ]
 
 (** Textual id identifying a network interface, typically "tap0" on
     UNIX and "0" on Xen. *)
@@ -46,6 +48,7 @@ type callback = t -> interface -> id -> unit Lwt.t
 val get_id    : interface -> id
 val get_ethif : interface -> Ethif.t
 val get_ipv4  : interface -> Ipv4.t
+val get_ipv6  : interface -> Ipv6.t
 val get_icmp  : interface -> Icmp.t
 val get_udp   : interface -> Udp.t
 val get_tcp   : interface -> Tcp.Pcb.t
@@ -75,6 +78,7 @@ val set_promiscuous: t -> id -> (id -> Ethif.packet -> unit Lwt.t) -> unit
     buffer, causing [frame] to be emitted on the network. *)
 val inject_packet : t -> id -> Cstruct.t -> unit Lwt.t
 
+(* V4 *)
 (** [tcpv4_of_addr mgr ip] returns all the TCP threads that operate on
     [ip]. *)
 val tcpv4_of_addr : t -> Ipaddr.V4.t option -> Tcp.Pcb.t list
@@ -85,6 +89,19 @@ val udpv4_of_addr : t -> Ipaddr.V4.t option -> Udp.t list
 (** [tcpv4_of_dst_addr mgr ip] returns a TCP threads able to talk to
     remote address [ip]. *)
 val tcpv4_of_dst_addr : t -> Ipaddr.V4.t -> Tcp.Pcb.t
+
+(* V6 *)
+(** [tcpv6_of_addr mgr ip] returns all the TCP threads that operate on
+    [ip]. *)
+val tcpv6_of_addr : t -> Ipaddr.V6.t option -> Tcp.Pcb.t list
+
+(** Like [tcpv6_of_addr] returns UDP threads. *)
+val udpv6_of_addr : t -> Ipaddr.V6.t option -> Udp.t list
+
+(** [tcpv6_of_dst_addr mgr ip] returns a TCP threads able to talk to
+    remote address [ip]. *)
+val tcpv6_of_dst_addr : t -> Ipaddr.V6.t -> Tcp.Pcb.t
+
 
 (** [get_intf_mac mgr id] returns the MAC address of interface [id].*)
 val get_intf_mac : t -> id -> Macaddr.t

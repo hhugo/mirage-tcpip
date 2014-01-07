@@ -28,6 +28,7 @@ type t = {
   mac: Macaddr.t;
   arp: Arp.t;
   mutable ipv4: (Cstruct.t -> unit Lwt.t);
+  mutable ipv6: (Cstruct.t -> unit Lwt.t);
   mutable promiscuous:( packet -> unit Lwt.t) option;
 }
 
@@ -43,7 +44,9 @@ let default_process t frame =
   | 0x0800 -> (* IPv4 *)
     let payload = Cstruct.shift frame sizeof_ethernet in
     t.ipv4 payload
-  | 0x86dd -> return () (* IPv6 *) (*printf "Ethif: discarding ipv6\n%!"*)
+  | 0x86dd -> (* IPv6 *)
+    let payload = Cstruct.shift frame sizeof_ethernet in
+    t.ipv6 payload
   | etype  -> return () (*printf "Ethif: unknown frame %x\n%!" etype*)
 
 (* Handle a single input frame *)
@@ -77,6 +80,7 @@ let rec listen t =
 
 let create netif =
   let ipv4 = fun (_:Cstruct.t) -> return () in
+  let ipv6 = fun (_:Cstruct.t) -> return () in
   (* TODO: there's a race here if the MAC can change in the future *)
   let mac = Netif.mac netif in
   let arp =
@@ -84,7 +88,7 @@ let create netif =
     let get_etherbuf () = return (Io_page.to_cstruct (Io_page.get 1)) in
     let output buf = Netif.write netif buf in
     Arp.create ~output ~get_mac ~get_etherbuf in
-  let t = { netif; ipv4; mac; arp; promiscuous=None; } in
+  let t = { netif; ipv4; ipv6; mac; arp; promiscuous=None; } in
   let listen = listen t in
   (t, listen)
 
@@ -94,9 +98,11 @@ let query_arp t = Arp.query t.arp
 
 let attach t = function
   |`IPv4 fn -> t.ipv4 <- fn
-
+  |`IPv6 fn -> t.ipv6 <- fn
 let detach t = function
   |`IPv4 -> t.ipv4 <- fun (_:Cstruct.t) -> return ()
+  |`IPv6 -> t.ipv6 <- fun (_:Cstruct.t) -> return ()
+
 
 let mac t = t.mac
 let get_netif t = t.netif

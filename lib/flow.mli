@@ -23,6 +23,11 @@ module TCPv4 : FLOW with
   and type src = ipv4_src
   and type dst = ipv4_dst
 
+module TCPv6 : FLOW with
+      type mgr = Manager.t
+  and type src = ipv6_src
+  and type dst = ipv6_dst
+
 module Shmem : FLOW with
       type mgr = Manager.t
   and type src = peer_uid
@@ -40,11 +45,12 @@ val connect :
   Manager.t -> [>
    | `Shmem of peer_uid option * peer_uid * (t -> unit Lwt.t)
    | `TCPv4 of ipv4_src option * ipv4_dst * (t -> unit Lwt.t)
+   | `TCPv6 of ipv6_src option * ipv6_dst * (t -> unit Lwt.t)
   ] -> unit Lwt.t
 
 val listen :
   Manager.t -> [>
    | `Shmem of peer_uid * (peer_uid -> t -> unit Lwt.t)
    | `TCPv4 of ipv4_src * (ipv4_dst -> t -> unit Lwt.t)
+   | `TCPv6 of ipv6_src * (ipv6_dst -> t -> unit Lwt.t)
   ] -> unit Lwt.t
-

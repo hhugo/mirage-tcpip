@@ -40,8 +40,9 @@ val create : Netif.t -> t * unit Lwt.t
     will replace the callback installed with [attach] by the default
     callback that does nothing. *)
 
-val attach : t -> [< `IPv4 of Cstruct.t -> unit Lwt.t ] -> unit
-val detach : t -> [< `IPv4 ] -> unit
+val attach : t -> [< `IPv4 of Cstruct.t -> unit Lwt.t
+                  |  `IPv6 of Cstruct.t -> unit Lwt.t ] -> unit
+val detach : t -> [< `IPv4 | `IPv6 ] -> unit
 
 (** Accessors for t values *)
 

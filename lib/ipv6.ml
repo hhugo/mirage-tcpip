@@ -18,27 +18,25 @@ open Lwt
 open Printf
 open Nettypes
 
-cstruct ipv4 {
-  uint8_t        hlen_version;
-  uint8_t        tos;
-  uint16_t       len;
-  uint16_t       id;
-  uint16_t       off;
-  uint8_t        ttl;
-  uint8_t        proto;
-  uint16_t       csum;
-  uint32_t       src;
-  uint32_t       dst
+cstruct ipv6 {
+  uint32_t       version;
+  uint16_t       payload_len;
+  uint8_t        nxt;
+  uint8_t        hop;
+  uint64_t       src_hi;
+  uint64_t       src_lo;
+  uint64_t       dst_hi;
+  uint64_t       dst_lo;
 } as big_endian
 
 type t = {
   ethif: Ethif.t;
-  mutable ip: Ipaddr.V4.t;
-  mutable netmask: Ipaddr.V4.t;
-  mutable gateways: Ipaddr.V4.t list;
-  mutable icmp: Ipaddr.V4.t -> Cstruct.t -> Cstruct.t -> unit Lwt.t;
-  mutable udp: src:Ipaddr.V4.t -> dst:Ipaddr.V4.t -> Cstruct.t -> unit Lwt.t;
-  mutable tcp: src:Ipaddr.V4.t -> dst:Ipaddr.V4.t -> Cstruct.t -> unit Lwt.t;
+  mutable ip: Ipaddr.V6.t;
+  mutable netmask: Ipaddr.V6.t;
+  mutable gateways: Ipaddr.V6.t list;
+  mutable icmp: Ipaddr.V6.t -> Cstruct.t -> Cstruct.t -> unit Lwt.t;
+  mutable udp: src:Ipaddr.V6.t -> dst:Ipaddr.V6.t -> Cstruct.t -> unit Lwt.t;
+  mutable tcp: src:Ipaddr.V6.t -> dst:Ipaddr.V6.t -> Cstruct.t -> unit Lwt.t;
 }
 
 module Routing = struct
@@ -48,25 +46,25 @@ module Routing = struct
     |Gateway
     |Local
 
-  exception No_route_to_destination_address of Ipaddr.V4.t
+  exception No_route_to_destination_address of Ipaddr.V6.t
 
-  let is_local t ip =
-    let ipand a b = Int32.logand (Ipaddr.V4.to_int32 a) (Ipaddr.V4.to_int32 b) in
-    (ipand t.ip t.netmask) = (ipand ip t.netmask)
+  let is_local t ip = false
+    (* let ipand a b = Int32.logand (Ipaddr.V4.to_int32 a) (Ipaddr.V4.to_int32 b) in *)
+    (* (ipand t.ip t.netmask) = (ipand ip t.netmask) *)
 
   let destination_mac t =
     function
-    |ip when ip = Ipaddr.V4.broadcast || ip = Ipaddr.V4.any -> (* Broadcast *)
+    |ip  -> (* Broadcast *)
       return Macaddr.broadcast
-    |ip when is_local t ip -> (* Local *)
-      Ethif.query_arp t.ethif ip
-    |ip -> begin (* Gateway *)
-      match t.gateways with
-      |hd::_ -> Ethif.query_arp t.ethif hd
-      |[] ->
-        printf "IP.output: no route to %s\n%!" (Ipaddr.V4.to_string ip);
-        fail (No_route_to_destination_address ip)
-    end
+    (* |ip when is_local t ip -> (\* Local *\) *)
+    (*   Ethif.query_arp t.ethif ip *)
+    (* |ip -> begin (\* Gateway *\) *)
+    (*   match t.gateways with *)
+    (*   |hd::_ -> Ethif.query_arp t.ethif hd *)
+    (*   |[] -> *)
+    (*     printf "IP.output: no route to %a\n%!" Ipaddr.V6.to_buffer ip; *)
+    (*     fail (No_route_to_destination_address ip) *)
+(* end *)
 end
 
 let get_header ~proto ~dest_ip t =
@@ -79,31 +77,29 @@ let get_header ~proto ~dest_ip t =
   Ethif.set_ethernet_ethertype ethernet_frame 0x0800;
   let buf = Cstruct.shift ethernet_frame Ethif.sizeof_ethernet in
   (* Write the constant IPv4 header fields *)
-  set_ipv4_hlen_version buf ((4 lsl 4) + (5)); (* TODO options *)
-  set_ipv4_tos buf 0;
-  set_ipv4_off buf 0; (* TODO fragmentation *)
-  set_ipv4_ttl buf 38; (* TODO *)
+  set_ipv6_version buf (Int32.shift_left 6l  28); (* TODO options *)
   let proto = match proto with |`ICMP -> 1 |`TCP -> 6 |`UDP -> 17 in
-  set_ipv4_proto buf proto;
-  set_ipv4_src buf (Ipaddr.V4.to_int32 t.ip);
-  set_ipv4_dst buf (Ipaddr.V4.to_int32 dest_ip);
-  let len = Ethif.sizeof_ethernet + sizeof_ipv4 in
+  set_ipv6_nxt buf proto;
+  set_ipv6_hop buf 38; (* TODO *)
+  let src_hi,src_lo = Ipaddr.V6.to_int64 t.ip in
+  let dst_hi,dst_lo = Ipaddr.V6.to_int64 dest_ip in
+  set_ipv6_src_hi buf src_hi;
+  set_ipv6_src_lo buf src_lo;
+  set_ipv6_dst_hi buf dst_hi;
+  set_ipv6_dst_lo buf dst_lo;
+  let len = Ethif.sizeof_ethernet + sizeof_ipv6 in
   return (ethernet_frame, len)
 
 let adjust_output_header ~tlen frame =
-  let buf = Cstruct.sub frame Ethif.sizeof_ethernet sizeof_ipv4 in
+  let buf = Cstruct.sub frame Ethif.sizeof_ethernet sizeof_ipv6 in
   (* Set the mutable values in the ipv4 header *)
-  set_ipv4_len buf tlen;
-  set_ipv4_id buf (Random.int 65535); (* TODO *)
-  set_ipv4_csum buf 0;
-  let checksum = Checksum.ones_complement (Cstruct.sub buf 0 sizeof_ipv4) in
-  set_ipv4_csum buf checksum
+  set_ipv6_payload_len buf tlen
 
 (* We write a whole frame, truncated from the right where the
  * packet data stops.
  *)
 let write t frame data =
-  let ihl = 5 in (* TODO options *)
+  let ihl = 0 in (* TODO options *)
   let tlen = (ihl * 4) + (Cstruct.len data) in
   adjust_output_header ~tlen frame;
   Ethif.writev t.ethif [frame;data]
@@ -115,16 +111,19 @@ let writev t ethernet_frame bufs =
 
 let input t buf =
   (* buf pointers to to start of IPv4 header here *)
-  let ihl = (get_ipv4_hlen_version buf land 0xf) * 4 in
-  let src = Ipaddr.V4.of_int32 (get_ipv4_src buf) in
-  let dst = Ipaddr.V4.of_int32 (get_ipv4_dst buf) in
-  let payload_len = get_ipv4_len buf - ihl in
+  let src_lo = get_ipv6_src_lo buf
+  and src_hi = get_ipv6_src_hi buf
+  and dst_lo = get_ipv6_dst_lo buf
+  and dst_hi = get_ipv6_dst_hi buf in
+  let src = Ipaddr.V6.of_int64 (src_hi,src_lo)
+  and dst = Ipaddr.V6.of_int64 (dst_hi,dst_lo) in
+  let payload_len = get_ipv6_payload_len buf in
   (* XXX this will raise exception for 0-length payload *)
-  let hdr = Cstruct.sub buf 0 ihl in
-  let data = Cstruct.sub buf ihl payload_len in
-  match get_ipv4_proto buf with
-  |1 -> (* ICMP *)
-    t.icmp src hdr data
+  (* let hdr = Cstruct.sub buf 0 ihl in *)
+  let data = Cstruct.sub buf sizeof_ipv6 (payload_len - sizeof_ipv6) in
+  match get_ipv6_nxt buf with
+  (* |1 -> (\* ICMP *\) *)
+  (*   t.icmp src hdr data *)
   |6 -> (* TCP *)
     t.tcp ~src ~dst data
   |17 -> (* UDP *)
@@ -136,18 +135,18 @@ let default_udp = fun ~src ~dst _ -> return ()
 let default_tcp = fun ~src ~dst _ -> return ()
 
 let create ethif =
-  let ip = Ipaddr.V4.any in
-  let netmask = Ipaddr.V4.any in
+  let ip = Ipaddr.V6.unspecified in
+  let netmask = Ipaddr.V6.unspecified in
   let gateways = [] in
   let icmp = default_icmp in
   let udp = default_udp in
   let tcp = default_tcp in
   let t = { ethif; ip; netmask; gateways; icmp; udp; tcp } in
-  Ethif.attach ethif (`IPv4 (input t));
+  Ethif.attach ethif (`IPv6 (input t));
   let th,_ = Lwt.task () in
   Lwt.on_cancel th (fun () ->
     printf "IPv4: shutting down\n%!";
-    Ethif.detach ethif `IPv4);
+    Ethif.detach ethif `IPv6);
   t, th
 
 let attach t = function
@@ -163,7 +162,8 @@ let detach t = function
 let set_ip t ip =
   t.ip <- ip;
   (* Inform ARP layer of new IP *)
-  Ethif.add_ip t.ethif ip
+  (* Ethif.add_ip t.ethif ip *)
+  Lwt.return_unit
 
 let get_ip t = t.ip
 
