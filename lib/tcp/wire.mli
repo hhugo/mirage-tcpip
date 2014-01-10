@@ -16,33 +16,33 @@
 
 open Cstruct
 
-val get_tcpv4_src_port : t -> uint16
-val set_tcpv4_src_port : t -> uint16 -> unit
+val get_tcp_src_port : t -> uint16
+val set_tcp_src_port : t -> uint16 -> unit
 
-val get_tcpv4_dst_port : t -> uint16
-val set_tcpv4_dst_port : t -> uint16 -> unit
+val get_tcp_dst_port : t -> uint16
+val set_tcp_dst_port : t -> uint16 -> unit
 
-val get_tcpv4_sequence : t -> uint32
-val set_tcpv4_sequence : t -> uint32 -> unit
+val get_tcp_sequence : t -> uint32
+val set_tcp_sequence : t -> uint32 -> unit
 
-val get_tcpv4_ack_number : t -> uint32
-val set_tcpv4_ack_number : t -> uint32 -> unit
+val get_tcp_ack_number : t -> uint32
+val set_tcp_ack_number : t -> uint32 -> unit
 
-val get_tcpv4_window : t -> uint16
-val set_tcpv4_window : t -> uint16 -> unit
+val get_tcp_window : t -> uint16
+val set_tcp_window : t -> uint16 -> unit
 
-val get_tcpv4_checksum : t -> uint16
-val set_tcpv4_checksum : t -> uint16 -> unit
+val get_tcp_checksum : t -> uint16
+val set_tcp_checksum : t -> uint16 -> unit
 
-val get_tcpv4_urg_ptr : t -> uint16
-val set_tcpv4_urg_ptr : t -> uint16 -> unit
+val get_tcp_urg_ptr : t -> uint16
+val set_tcp_urg_ptr : t -> uint16 -> unit
 
 val get_data_offset : t -> int
 val set_data_offset : t -> int -> unit
 
-val sizeof_tcpv4 : int
+val sizeof_tcp : int
 
-val set_tcpv4_flags : t -> int -> unit
+val set_tcp_flags : t -> int -> unit
 
 val get_fin : t -> bool
 val get_syn : t -> bool

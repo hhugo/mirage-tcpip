@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-cstruct tcpv4 {
+cstruct tcp {
   uint16_t src_port;
   uint16_t dst_port;
   uint32_t sequence;
@@ -32,15 +32,15 @@ cstruct pseudo_header {
   uint8_t res;
   uint8_t proto;
   uint16_t len
-} as big_endian 
+} as big_endian
 
 open Cstruct
 
 (* XXX note that we overwrite the lower half of dataoff
- * with 0, so be careful when implemented CWE flag which 
+ * with 0, so be careful when implemented CWE flag which
  * sits there *)
-let get_data_offset buf = ((get_tcpv4_dataoff buf) lsr 4) * 4
-let set_data_offset buf v = set_tcpv4_dataoff buf (v lsl 4)
+let get_data_offset buf = ((get_tcp_dataoff buf) lsr 4) * 4
+let set_data_offset buf v = set_tcp_dataoff buf (v lsl 4)
 
 let get_fin buf = ((get_uint8 buf 13) land (1 lsl 0)) > 0
 let get_syn buf = ((get_uint8 buf 13) land (1 lsl 1)) > 0
@@ -62,7 +62,7 @@ let set_cwr buf = set_uint8 buf 13 ((get_uint8 buf 13) lor (1 lsl 7))
 
 let get_options buf =
   if get_data_offset buf > 20 then
-    Options.unmarshal (shift buf sizeof_tcpv4) else []
+    Options.unmarshal (shift buf sizeof_tcp) else []
 
 let set_options buf ts =
   Options.marshal buf ts
@@ -83,7 +83,7 @@ type id = {
 
 (* Note: since just one pbuf is used for all chksum calculations,
    the call to ones_complement_list should never block *)
-let pbuf = Cstruct.sub (Cstruct.of_bigarray (Io_page.get 1)) 0 sizeof_pseudo_header 
+let pbuf = Cstruct.sub (Cstruct.of_bigarray (Io_page.get 1)) 0 sizeof_pseudo_header
 let checksum ~src ~dst =
   fun data ->
     set_pseudo_header_src pbuf (Ipaddr.V4.to_int32 src);
@@ -102,39 +102,39 @@ let xmit ~ip ~id ?(rst=false) ?(syn=false) ?(fin=false) ?(psh=false)
   (* Shift this out by the combined ethernet + IP header sizes *)
   let tcp_frame = Cstruct.shift ethernet_frame header_len in
   (* Append the TCP options to the header *)
-  let options_frame = Cstruct.shift tcp_frame sizeof_tcpv4 in
+  let options_frame = Cstruct.shift tcp_frame sizeof_tcp in
   let options_len =
     match options with
     |[] -> 0
     |options -> Options.marshal options_frame options
   in
   (* At this point, extend the IPv4 view by the TCP+options size *)
-  let ethernet_frame = Cstruct.set_len ethernet_frame (header_len + sizeof_tcpv4 + options_len) in
+  let ethernet_frame = Cstruct.set_len ethernet_frame (header_len + sizeof_tcp + options_len) in
   let sequence = Sequence.to_int32 seq in
   let ack_number = match rx_ack with Some n -> Sequence.to_int32 n |None -> 0l in
-  let data_off = (sizeof_tcpv4 / 4) + (options_len / 4) in
-  set_tcpv4_src_port tcp_frame id.local_port;
-  set_tcpv4_dst_port tcp_frame id.dest_port;
-  set_tcpv4_sequence tcp_frame sequence;
-  set_tcpv4_ack_number tcp_frame ack_number;
+  let data_off = (sizeof_tcp / 4) + (options_len / 4) in
+  set_tcp_src_port tcp_frame id.local_port;
+  set_tcp_dst_port tcp_frame id.dest_port;
+  set_tcp_sequence tcp_frame sequence;
+  set_tcp_ack_number tcp_frame ack_number;
   set_data_offset tcp_frame data_off;
-  set_tcpv4_flags tcp_frame 0;
+  set_tcp_flags tcp_frame 0;
   if rx_ack <> None then set_ack tcp_frame;
   if rst then set_rst tcp_frame;
   if syn then set_syn tcp_frame;
   if fin then set_fin tcp_frame;
   if psh then set_psh tcp_frame;
-  set_tcpv4_window tcp_frame window;
-  set_tcpv4_checksum tcp_frame 0;
-  set_tcpv4_urg_ptr tcp_frame 0;
+  set_tcp_window tcp_frame window;
+  set_tcp_checksum tcp_frame 0;
+  set_tcp_urg_ptr tcp_frame 0;
   let header = Cstruct.shift ethernet_frame header_len in
   let checksum = checksum ~src:id.local_ip ~dst:id.dest_ip (header::datav) in
-  set_tcpv4_checksum tcp_frame checksum;
+  set_tcp_checksum tcp_frame checksum;
   (*
   printf "TCP.xmit checksum %04x %s.%d->%s.%d rst %b syn %b fin %b psh %b seq %lu ack %lu %s datalen %d datafrag %d dataoff %d olen %d\n%!"
     checksum
     (ipv4_addr_to_string id.local_ip) id.local_port (ipv4_addr_to_string id.dest_ip) id.dest_port
-    rst syn fin psh sequence ack_number (Options.prettyprint options) 
+    rst syn fin psh sequence ack_number (Options.prettyprint options)
     (Cstruct.lenv datav) (List.length datav) data_off options_len;
   *)
   Ipv4.writev ip ethernet_frame datav
