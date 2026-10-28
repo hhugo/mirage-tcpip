@@ -262,9 +262,19 @@ let ra_prefix_length () =
     (has_ra_prefix ctx);
   Lwt.return_unit
 
+let ra_lifetimes () =
+  let ctx = ra_received () in
+  let ctx, _ = Ndpv6.tick ~now:(Duration.of_sec 1) ctx in
+  Alcotest.(check (list ip)) "the router is still a default router"
+    [router_address] (Ndpv6.get_routers ctx);
+  Alcotest.(check bool) "the RA prefix is still on-link" true
+    (has_ra_prefix ctx);
+  Lwt.return_unit
+
 let suite = [
   "Send a UDP packet from one IPV6 stack and check it is received by another", `Quick, pass_udp_traffic;
   "NA is sent when a ND is received", `Quick, dad_na_is_sent;
   "NA is received, stack fails to initialise", `Quick, dad_na_is_received;
   "RA prefix uses the Prefix Length", `Quick, ra_prefix_length;
+  "RA lifetimes are in seconds", `Quick, ra_lifetimes;
 ]
