@@ -742,7 +742,7 @@ module Parser = struct
       | 3, 4 ->
         let pfx_prefix =
           Ipaddr.Prefix.make
-            (Ipv6_wire.Opt_prefix.get_len opt)
+            (Ipv6_wire.Opt_prefix.get_prefix_len opt)
             (Ipv6_wire.Opt_prefix.get_prefix opt)
         in
         let pfx_on_link = Ipv6_wire.Opt_prefix.on_link opt in

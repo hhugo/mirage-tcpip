@@ -214,8 +214,57 @@ let dad_na_is_received () =
      Alcotest.fail "stack initialization should have failed")
   ]
 
+let router_address = Ipaddr.V6.of_string_exn "fe80::1"
+let ra_prefix = Ipaddr.V6.Prefix.of_string_exn "2001:db8::/64"
+
+(* A Router Advertisement from [router_address] (Router Lifetime 1800 s) with
+   a Prefix Information option for [ra_prefix] (on-link, autonomous, valid
+   30 days, preferred 7 days). *)
+let ra_packet () =
+  let icmp_len = Ipv6_wire.Ra.sizeof_ra + Ipv6_wire.Opt_prefix.sizeof_opt_prefix in
+  let buf = Cstruct.create (Ipv6_wire.sizeof_ipv6 + icmp_len) in
+  Ipv6_wire.set_version_flow buf 0x60000000l; (* IPv6 *)
+  Ipv6_wire.set_len buf icmp_len;
+  Ipaddr_cstruct.V6.write_cstruct_exn router_address (Cstruct.shift buf 8);
+  Ipaddr_cstruct.V6.write_cstruct_exn Ipaddr.V6.link_nodes (Cstruct.shift buf 24);
+  Ipv6_wire.set_hlim buf 255;
+  Ipv6_wire.set_nhdr buf (Ipv6_wire.protocol_to_int `ICMP);
+  let hdr, icmpbuf = Cstruct.split buf Ipv6_wire.sizeof_ipv6 in
+  Ipv6_wire.set_ty icmpbuf 134; (* RA *)
+  Ipv6_wire.set_code icmpbuf 0;
+  Cstruct.set_uint8 icmpbuf 4 64; (* Cur Hop Limit *)
+  Cstruct.BE.set_uint16 icmpbuf 6 1800; (* Router Lifetime, in seconds *)
+  let opt = Cstruct.shift icmpbuf Ipv6_wire.Ra.sizeof_ra in
+  Cstruct.set_uint8 opt 0 3; (* Prefix Information *)
+  Ipv6_wire.Opt_prefix.set_len opt 4;
+  Ipv6_wire.Opt_prefix.set_prefix_len opt (Ipaddr.V6.Prefix.bits ra_prefix);
+  Ipv6_wire.Opt_prefix.set_reserved1 opt 0xc0; (* on-link, autonomous *)
+  Ipv6_wire.Opt_prefix.set_valid_lifetime opt 2592000l;
+  Ipv6_wire.Opt_prefix.set_preferred_lifetime opt 604800l;
+  Ipv6_wire.Opt_prefix.set_prefix opt (Ipaddr.V6.Prefix.network ra_prefix);
+  Ipv6_wire.Icmpv6.set_checksum icmpbuf 0;
+  Ipv6_wire.Icmpv6.set_checksum icmpbuf @@ Ndpv6.checksum hdr [icmpbuf];
+  buf
+
+let ra_received () =
+  let mac = Macaddr.of_string_exn "02:00:00:00:00:01" in
+  let ctx, _ = Ndpv6.local ~handle_ra:true ~now:0L mac in
+  let ctx, _, _ = Ndpv6.handle ~now:0L ctx (ra_packet ()) in
+  ctx
+
+let has_ra_prefix ctx =
+  List.exists (fun p -> Ipaddr.V6.Prefix.compare p ra_prefix = 0)
+    (Ndpv6.get_prefix ctx)
+
+let ra_prefix_length () =
+  let ctx = ra_received () in
+  Alcotest.(check bool) "the RA prefix is on-link with its length" true
+    (has_ra_prefix ctx);
+  Lwt.return_unit
+
 let suite = [
   "Send a UDP packet from one IPV6 stack and check it is received by another", `Quick, pass_udp_traffic;
   "NA is sent when a ND is received", `Quick, dad_na_is_sent;
   "NA is received, stack fails to initialise", `Quick, dad_na_is_received;
+  "RA prefix uses the Prefix Length", `Quick, ra_prefix_length;
 ]
