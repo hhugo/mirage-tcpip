@@ -730,9 +730,9 @@ module Parser = struct
 
   (* [time] is in nanoseconds; RA lifetimes are unsigned 32-bit (or 16-bit)
      seconds, its timers milliseconds (RFC 4861 4.2, 4.6.2) *)
-  let uint32 n = Int64.(to_int (logand (of_int32 n) 0xFFFF_FFFFL))
-  let of_sec32 n = Duration.of_sec (uint32 n)
-  let of_ms32 n = Duration.of_ms (uint32 n)
+  let uint32 n = Int64.(logand (of_int32 n) 0xFFFF_FFFFL)
+  let of_sec32 n = Duration.of_sec_64 (uint32 n)
+  let of_ms32 n = Duration.of_ms_64 (uint32 n)
 
   let rec parse_options1 opts =
     if Cstruct.length opts >= Ipv6_wire.Opt.sizeof_opt then
