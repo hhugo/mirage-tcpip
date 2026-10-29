@@ -232,10 +232,10 @@ let ra_packet () =
   let hdr, icmpbuf = Cstruct.split buf Ipv6_wire.sizeof_ipv6 in
   Ipv6_wire.set_ty icmpbuf 134; (* RA *)
   Ipv6_wire.set_code icmpbuf 0;
-  Cstruct.set_uint8 icmpbuf 4 64; (* Cur Hop Limit *)
-  Cstruct.BE.set_uint16 icmpbuf 6 1800; (* Router Lifetime, in seconds *)
+  Ipv6_wire.Ra.set_cur_hop_limit icmpbuf 64;
+  Ipv6_wire.Ra.set_router_lifetime icmpbuf 1800;
   let opt = Cstruct.shift icmpbuf Ipv6_wire.Ra.sizeof_ra in
-  Cstruct.set_uint8 opt 0 3; (* Prefix Information *)
+  Ipv6_wire.set_ty opt 3;
   Ipv6_wire.Opt_prefix.set_len opt 4;
   Ipv6_wire.Opt_prefix.set_prefix_len opt (Ipaddr.V6.Prefix.bits ra_prefix);
   Ipv6_wire.Opt_prefix.set_reserved1 opt 0xc0; (* on-link, autonomous *)
