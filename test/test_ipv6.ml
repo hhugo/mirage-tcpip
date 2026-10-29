@@ -15,6 +15,9 @@ let ip =
   end in
   (module M : Alcotest.TESTABLE with type t = M.t)
 
+let prefix =
+  Alcotest.testable Ipaddr.V6.Prefix.pp (fun a b -> Ipaddr.V6.Prefix.compare a b = 0)
+
 type stack = {
   backend : B.t;
   netif : V.t;
@@ -252,14 +255,10 @@ let ra_received () =
   let ctx, _, _ = Ndpv6.handle ~now:0L ctx (ra_packet ()) in
   ctx
 
-let has_ra_prefix ctx =
-  List.exists (fun p -> Ipaddr.V6.Prefix.compare p ra_prefix = 0)
-    (Ndpv6.get_prefix ctx)
-
 let ra_prefix_length () =
   let ctx = ra_received () in
-  Alcotest.(check bool) "the RA prefix is on-link with its length" true
-    (has_ra_prefix ctx);
+  Alcotest.(check (list prefix)) "the RA prefix is on-link"
+    [ra_prefix] (Ndpv6.get_prefix ctx);
   Lwt.return_unit
 
 let ra_lifetimes () =
@@ -267,8 +266,8 @@ let ra_lifetimes () =
   let ctx, _ = Ndpv6.tick ~now:(Duration.of_sec 1) ctx in
   Alcotest.(check (list ip)) "the router is still a default router"
     [router_address] (Ndpv6.get_routers ctx);
-  Alcotest.(check bool) "the RA prefix is still on-link" true
-    (has_ra_prefix ctx);
+  Alcotest.(check (list prefix)) "the RA prefix is still on-link"
+    [ra_prefix] (Ndpv6.get_prefix ctx);
   Lwt.return_unit
 
 let suite = [
